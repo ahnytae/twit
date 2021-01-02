@@ -12,9 +12,6 @@ const NavComponent = () => {
         <li>
           <Link to="/profile">Profile</Link>
         </li>
-        <li>
-          <Link to="/editProfile">EditProfile</Link>
-        </li>
       </Nav>
     </>
   );

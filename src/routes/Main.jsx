@@ -34,7 +34,7 @@ const Main = () => {
     await dbService.collection("send Message").add(dbMessageObj);
 
     setText("");
-    setFileBaseUrl("");
+    setFileBaseUrl(null);
   };
 
   const onChange = (e) => {
@@ -117,7 +117,7 @@ const MessageLists = ({ dbText, isOwner }) => {
     const deleteOk = window.confirm("삭제 하시겠습니까?");
 
     if (deleteOk) {
-      await dbService.doc(`send Message/${dbText.textId}`).delete();
+      await dbService.doc(`send Message/${textId}`).delete();
       await storageService.refFromURL(dbText.imgPublicUrl).delete();
     }
   };
