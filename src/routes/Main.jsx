@@ -3,21 +3,38 @@ import { useState, useEffect, useContext } from "react";
 // internal components
 import { dbService } from "../common/firebase";
 import { UserAuth } from "../App";
+import { storageService } from "common/firebase";
 
 const Main = () => {
   const userAuth = useContext(UserAuth);
 
   const [text, setText] = useState("");
   const [dbText, setDbText] = useState([]);
+  const [fileBaseUrl, setFileBaseUrl] = useState("");
 
   const onSubmit = async (e) => {
     e.preventDefault();
-    await dbService.collection("send Message").add({
+
+    // let imgPublicUrl = "";
+    // if (imgPublicUrl !== "") {
+    const fileRef = await storageService
+      .ref()
+      .child(`${userAuth.uid}/${Math.random().toString(36).substr(2, 11)}`)
+      .putString(fileBaseUrl, "data_url");
+
+    const imgPublicUrl = await fileRef.ref.getDownloadURL();
+    // }
+    const dbMessageObj = {
       text,
       createdAt: Date.now(),
-      createID: userAuth.uid,
-    });
+      imgPublicUrl,
+      creatorId: userAuth.uid,
+    };
+
+    await dbService.collection("send Message").add(dbMessageObj);
+
     setText("");
+    setFileBaseUrl("");
   };
 
   const onChange = (e) => {
@@ -27,74 +44,61 @@ const Main = () => {
     setText(value);
   };
 
-  // 방법1
-  // const getDB = async () => {
-  //   const dbMessage = await dbService.collection("send Message").get();
-  //   dbMessage.forEach((document) => {
-  //     setDbText((prev) => [document.data(), ...prev]);
-  //   });
-  // };
-
-  // 방법2
   useEffect(() => {
     dbService.collection("send Message").onSnapshot((snapShot) => {
       const messageArray = snapShot.docs.map((item) => ({
         id: item.id,
-        createID: item.createID,
+        creatorId: item.creatorID,
         ...item.data(),
       }));
       setDbText(messageArray);
     });
   }, []);
 
-  // const onDelete = (textId) => {
-  //   const deleteOk = window.confirm("삭제 하시겠습니까?");
+  // file read
+  const onChangeFile = (e) => {
+    const {
+      target: { files },
+    } = e;
 
-  //   if (deleteOk) {
-  //     dbService.doc(`send Message/${textId}`).delete();
-  //   }
-  // };
+    const fileData = files[0];
+    const reader = new FileReader();
+    reader.onloadend = (e) => {
+      setFileBaseUrl(e.target.result);
+    };
+    reader.readAsDataURL(fileData);
+  };
 
-  // const onEditClick = () => {
-  //   setEditClick((prev) => !prev);
-  // };
-
-  // const editChange = (e) => {
-  //   const {
-  //     target: { value },
-  //   } = e;
-  //   setEditText(value);
-  // };
-
-  // const lists = dbText.map((item) => {
-  //   return (
-  //     <>
-  //       <li style={{ margin: "10px 0" }} key={`${item.createdAt}`}>
-  //         {editClick ? <input type="text" value={editText} /> : item.text}
-  //       </li>
-
-  //       {userAuth.uid === item.createID && (
-  //         <>
-  //           <button onClick={() => onDelete(item.id)}>Delete</button>
-  //           <button onClick={onEditClick}>Edit</button>
-  //         </>
-  //       )}
-  //     </>
-  //   );
-  // });
+  const onDeleteImg = () => {
+    setFileBaseUrl("");
+  };
 
   return (
     <>
       <form onSubmit={onSubmit}>
         <input type="text" value={text} onChange={onChange} />
+        <input type="file" accept="image/*" onChange={onChangeFile} />
         <input type="submit" value="send" />
+        <div>
+          {fileBaseUrl && (
+            <>
+              <img
+                src={fileBaseUrl}
+                width="50px"
+                height="50px"
+                alt="message img"
+              />
+              <button onClick={onDeleteImg}>Clear</button>
+            </>
+          )}
+        </div>
       </form>
       <ul>
         {dbText.map((item) => (
           <MessageLists
             key={item.id}
-            obj={item}
-            isOwner={userAuth.uid === item.createID}
+            dbText={item}
+            isOwner={userAuth.uid === item.creatorId}
           />
         ))}
       </ul>
@@ -104,15 +108,17 @@ const Main = () => {
 
 export default Main;
 
-const MessageLists = ({ obj, isOwner }) => {
+// message Components
+const MessageLists = ({ dbText, isOwner }) => {
   const [editClick, setEditClick] = useState(false);
-  const [editText, setEditText] = useState(obj.text);
+  const [editText, setEditText] = useState(dbText.text);
 
-  const onDelete = (textId) => {
+  const onDelete = async (textId) => {
     const deleteOk = window.confirm("삭제 하시겠습니까?");
 
     if (deleteOk) {
-      dbService.doc(`send Message/${textId}`).delete();
+      await dbService.doc(`send Message/${dbText.textId}`).delete();
+      await storageService.refFromURL(dbText.imgPublicUrl).delete();
     }
   };
 
@@ -129,7 +135,7 @@ const MessageLists = ({ obj, isOwner }) => {
 
   const onSubmit = (e) => {
     e.preventDefault();
-    dbService.doc(`send Message/${obj.id}`).update({ text: editText });
+    dbService.doc(`send Message/${dbText.id}`).update({ text: editText });
     setEditClick((prev) => !prev);
   };
 
@@ -139,19 +145,29 @@ const MessageLists = ({ obj, isOwner }) => {
         {editClick ? (
           <>
             <form onSubmit={onSubmit}>
-              <input type="text" value={editText} onChange={editChange} />{" "}
+              <input type="text" value={editText} onChange={editChange} />
               <button onClick={onEditClick}>Cancel</button>
-              <input type="submit" value="edit mes" />
+              <input type="submit" value="update message" />
             </form>
           </>
         ) : (
-          obj.text
+          <>
+            <p>{dbText.text}</p>
+            {dbText.imgPublicUrl && (
+              <img
+                src={dbText.imgPublicUrl}
+                alt=""
+                width="50px"
+                height="50px"
+              />
+            )}
+          </>
         )}
       </div>
 
       {isOwner && (
         <>
-          <button onClick={() => onDelete(obj.id)}>Delete</button>
+          <button onClick={() => onDelete(dbText.id)}>Delete</button>
           <button onClick={onEditClick}>Edit</button>
         </>
       )}

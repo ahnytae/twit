@@ -2,6 +2,7 @@ import { useState, useEffect, createContext } from "react";
 import AppRouter from "./AppRouter";
 import { authService } from "./common/firebase";
 
+// user uid
 export const UserAuth = createContext(null);
 
 function App() {
